@@ -1,11 +1,5 @@
 --------- DATA ANALYSIS ----------
 
---  Deleting Duplicates from Booking_ID
-SELECT Booking_ID, COUNT(*)
-FROM bookings
-GROUP BY Booking_ID
-HAVING COUNT(*) > 1;
-
 ----- How many total bookings are recorded in the dataset? -----
 
 SELECT COUNT(*) AS Total_Bookings FROM bookings;
@@ -24,14 +18,14 @@ SELECT
     SUM(CASE WHEN Canceled_Rides_by_Customer IS NOT NULL THEN 1 ELSE 0 END) AS Canceled_By_Customer,
     SUM(CASE WHEN Canceled_Rides_by_Driver IS NOT NULL THEN 1 ELSE 0 END) AS Canceled_By_Driver
 FROM bookings
-WHERE Booking_Status = 'Canceled';
+WHERE Booking_Status  LIKE '%Canceled%';
 
 
 -- Which customers have the most canceled rides?
 
 SELECT Customer_ID, COUNT(*) AS Canceled_Rides
 FROM bookings
-WHERE Booking_Status = 'Canceled'
+WHERE Booking_Status LIKE '%Canceled%'
 GROUP BY Customer_ID
 ORDER BY Canceled_Rides DESC
 LIMIT 10;
@@ -87,7 +81,7 @@ SET SQL_SAFE_UPDATES = 0;
 
 UPDATE bookings  
 SET Payment_Method = 'Unknown'  
-WHERE Payment_Method = '';
+WHERE Payment_Method = '' OR Payment_Method IS NULL;
 
 SET SQL_SAFE_UPDATES = 1; 
 
@@ -130,7 +124,9 @@ ORDER BY Year, Month;
 
 -- What is the total revenue generated from all bookings?
 
-SELECT SUM(Booking_Value) AS Total_Revenue FROM bookings;
+SELECT SUM(Booking_Value) AS Total_Revenue
+FROM bookings
+WHERE Booking_Status NOT LIKE '%Canceled%';
 
 
 -- Who are Highest Revenue Generating Customers
@@ -154,14 +150,12 @@ LIMIT 10;
 
 -- When did each customer take their first and last ride?
 
-SELECT DISTINCT 
-    Customer_ID, 
-    FIRST_VALUE(Booking_Date) 
-		OVER (PARTITION BY Customer_ID ORDER BY Booking_Date) AS First_Ride,
-    LAST_VALUE(Booking_Date) 
-		OVER (PARTITION BY Customer_ID ORDER BY Booking_Date 
-        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Ride
-FROM bookings;
+SELECT 
+    Customer_ID,
+    MIN(Booking_Date) AS First_Ride,                      -- Earliest booking date
+    MAX(Booking_Date) AS Last_Ride                        -- Latest booking date
+FROM bookings
+GROUP BY Customer_ID;
 
 
 -- Which customers have the longest gap between their first and last ride?
@@ -180,19 +174,8 @@ ORDER BY Ride_Gap_Days DESC;
 
 (SELECT * FROM bookings ORDER BY Booking_Value DESC LIMIT 10)
 UNION
-(SELECT * FROM bookings ORDER BY Booking_Value ASC LIMIT 10);
-
-
--- What are the busiest days and hours for ride bookings?(Predicting Ride Demand by Day & Time)
-
-SELECT 
-    DAYNAME(Booking_Date) AS Day, 
-    HOUR(Booking_Time) AS Hour, 
-    COUNT(*) AS Total_Rides, 
-    ROUND(AVG(Booking_Value), 2) AS Avg_Fare
-FROM bookings
-GROUP BY Day, Hour
-ORDER BY Total_Rides DESC;
+(SELECT * FROM bookings ORDER BY Booking_Value ASC LIMIT 10)
+ORDER BY Booking_Value DESC;
 
 
 -- How can we segment customers based on ride frequency and spending behavior for targeted marketing?
@@ -209,27 +192,5 @@ SELECT
     END AS Customer_Type
 FROM bookings
 GROUP BY Customer_ID;
-
-
--- Which customer segment contributes the most revenue?
-SELECT 
-    Customer_Type, 
-    COUNT(Customer_ID) AS Total_Customers, 
-    SUM(Total_Spending) AS Segment_Revenue
-FROM (
-    SELECT 
-        Customer_ID, 
-        SUM(Booking_Value) AS Total_Spending,
-        CASE 
-            WHEN COUNT(Booking_ID) >= 50 THEN 'High-Frequency User'
-            WHEN COUNT(Booking_ID) BETWEEN 20 AND 49 THEN 'Moderate User'
-            ELSE 'Low-Frequency User'
-        END AS Customer_Type
-    FROM bookings
-    GROUP BY Customer_ID
-) AS Segments
-GROUP BY Customer_Type
-ORDER BY Segment_Revenue DESC;
-
 
 
